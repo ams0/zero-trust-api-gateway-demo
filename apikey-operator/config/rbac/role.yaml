@@ -1,0 +1,63 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: apikey-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gateway.zerotrust.io
+  resources:
+  - apikeys
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gateway.zerotrust.io
+  resources:
+  - apikeys/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - gateway.zerotrust.io
+  resources:
+  - apikeys/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - traefik.io
+  resources:
+  - middlewares
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

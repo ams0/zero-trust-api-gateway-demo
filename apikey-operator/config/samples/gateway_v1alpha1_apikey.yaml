@@ -1,0 +1,27 @@
+# Example: a pro-tier key for a CLI client, expiring end of 2026.
+# Apply, then read the minted key:
+#   kubectl apply -f config/samples/gateway_v1alpha1_apikey.yaml
+#   kubectl get apikey acme-cli -n apps
+#   kubectl get secret acme-cli-apikey -n apps -o jsonpath='{.data.api-key}' | base64 -d
+#   curl -sk -H "X-API-Key: <that value>" https://api.local/pro
+apiVersion: gateway.zerotrust.io/v1alpha1
+kind: APIKey
+metadata:
+  name: acme-cli
+  namespace: apps
+spec:
+  tier: pro
+  owner: acme-corp
+  description: "ACME CLI client"
+  expiresAt: "2026-12-31T23:59:59Z"
+---
+# A wildcard key valid on every tier, for an internal agent.
+apiVersion: gateway.zerotrust.io/v1alpha1
+kind: APIKey
+metadata:
+  name: platform-agent
+  namespace: apps
+spec:
+  tier: "*"
+  owner: platform-team
+  description: "Internal automation agent (all tiers)"

@@ -1,0 +1,147 @@
+# Dual-auth gateway routes for the API-key path (branch-only; main keeps JWT-only).
+#
+# For each tier, an IngressRoute that matches the SAME path as the JWT route but
+# only when an X-API-Key header is present (higher priority), so:
+#   - request with X-API-Key  -> this route -> apiKey middleware validates the hash
+#   - request with Bearer JWT -> falls through to the existing chain-<tier>
+#
+# The apikey-<tier> middleware is created/maintained by the operator (its
+# secretValues track the live key hashes). The ratelimit here keys on the API key
+# itself, giving per-key quotas. security-headers and strip-tier-prefix are reused
+# from the base demo (middlewares/).
+---
+# ---- per-key rate limits (same thresholds as the tiers, keyed on the API key) ----
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit-apikey-free
+  namespace: apps
+spec:
+  rateLimit:
+    average: 5
+    burst: 10
+    period: 1s
+    sourceCriterion:
+      requestHeaderName: X-Api-Key
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit-apikey-pro
+  namespace: apps
+spec:
+  rateLimit:
+    average: 50
+    burst: 100
+    period: 1s
+    sourceCriterion:
+      requestHeaderName: X-Api-Key
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit-apikey-enterprise
+  namespace: apps
+spec:
+  rateLimit:
+    average: 500
+    burst: 1000
+    period: 1s
+    sourceCriterion:
+      requestHeaderName: X-Api-Key
+---
+# ---- chains: apiKey validation -> hardening -> per-key rate limit -> strip ----
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: chain-apikey-free
+  namespace: apps
+spec:
+  chain:
+    middlewares:
+      - name: apikey-free          # operator-managed
+      - name: security-headers
+      - name: ratelimit-apikey-free
+      - name: strip-tier-prefix
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: chain-apikey-pro
+  namespace: apps
+spec:
+  chain:
+    middlewares:
+      - name: apikey-pro
+      - name: security-headers
+      - name: ratelimit-apikey-pro
+      - name: strip-tier-prefix
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: chain-apikey-enterprise
+  namespace: apps
+spec:
+  chain:
+    middlewares:
+      - name: ip-allowlist-enterprise   # network policy, same as the JWT enterprise chain
+      - name: apikey-enterprise
+      - name: security-headers
+      - name: ratelimit-apikey-enterprise
+      - name: strip-tier-prefix
+---
+# ---- routes: same paths as the JWT tiers, but only when X-API-Key is present ----
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: apikey-free
+  namespace: apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`api.local`) && PathPrefix(`/free`) && HeaderRegexp(`X-Api-Key`, `.+`)
+      priority: 1000
+      services:
+        - name: orders
+          port: 80
+      middlewares:
+        - name: chain-apikey-free
+  tls: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: apikey-pro
+  namespace: apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`api.local`) && PathPrefix(`/pro`) && HeaderRegexp(`X-Api-Key`, `.+`)
+      priority: 1000
+      services:
+        - name: orders
+          port: 80
+      middlewares:
+        - name: chain-apikey-pro
+  tls: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: apikey-enterprise
+  namespace: apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`api.local`) && PathPrefix(`/enterprise`) && HeaderRegexp(`X-Api-Key`, `.+`)
+      priority: 1000
+      services:
+        - name: orders
+          port: 80
+      middlewares:
+        - name: chain-apikey-enterprise
+  tls: {}
