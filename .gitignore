@@ -32,3 +32,6 @@ Thumbs.db
 *~
 .idea/
 .vscode/
+
+# compiled Go binary from local builds
+/apps/echo-svc/echo-svc
