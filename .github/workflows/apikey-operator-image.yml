@@ -1,7 +1,13 @@
 name: apikey-operator image
 
-# Build the operator image in CI and publish it (multi-arch) to Docker Hub.
-# Requires repo secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN (an access token).
+# Multi-arch build, the fast way: fan out one build job PER ARCH onto a NATIVE
+# runner (amd64 on ubuntu-latest, arm64 on the free ubuntu-24.04-arm runner — no
+# QEMU emulation), each pushing its single-arch image BY DIGEST (untagged). A final
+# "merge" job then assembles those digests into one multi-arch manifest under the
+# real tags. This is the canonical docker/build-push-action "distribute across
+# runners" pattern.
+#
+# Requires repo secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN (a Docker Hub token).
 on:
   push:
     branches: ["**"]
@@ -15,41 +21,103 @@ permissions:
   contents: read
 
 jobs:
-  build-push:
-    runs-on: ubuntu-latest
+  build:
+    name: build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest      # native amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm   # native arm64 (free for public repos) — no QEMU
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      # Per-platform scope keys for cache + artifact names (e.g. "linux-amd64").
+      - name: Compute platform slug + image name
+        run: |
+          echo "PLATFORM_SLUG=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+          echo "IMAGE=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/apikey-operator" >> "$GITHUB_ENV"
+        env:
+          PLATFORM: ${{ matrix.platform }}
 
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Image metadata (tags + labels)
+      # Build the single platform and push it WITHOUT a tag, addressed only by its
+      # content digest. The merge job below references these digests.
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: apikey-operator
+          file: apikey-operator/Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ env.PLATFORM_SLUG }}
+          cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_SLUG }}
+
+      # Hand the digest to the merge job as an artifact (filename = the digest).
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM_SLUG }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: merge manifest
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Image name
+        run: echo "IMAGE=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/apikey-operator" >> "$GITHUB_ENV"
+
+      - name: Download per-arch digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Decide the human tags once, here (raw "demo" + branch + short sha).
+      - name: Image metadata (tags)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/apikey-operator
+          images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=demo
             type=ref,event=branch
             type=sha,format=short
 
-      - name: Build and push (linux/amd64 + linux/arm64)
-        uses: docker/build-push-action@v6
-        with:
-          context: apikey-operator
-          file: apikey-operator/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # Combine the per-arch digests into one manifest list under every tag.
+      - name: Create multi-arch manifest
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
+
+      - name: Inspect result
+        run: docker buildx imagetools inspect ${{ env.IMAGE }}:demo
