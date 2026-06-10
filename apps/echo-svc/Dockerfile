@@ -1,10 +1,11 @@
 # Multi-stage build for the instrumented echo service.
-# `go mod tidy` resolves deps + writes go.sum at build time (needs network once).
-FROM golang:1.23 AS build
+# Uses the committed go.mod + go.sum for a reproducible, pinned build.
+FROM golang:1.26 AS build
 WORKDIR /src
-COPY go.mod ./
+COPY go.mod go.sum ./
+RUN go mod download
 COPY main.go ./
-RUN go mod tidy && CGO_ENABLED=0 go build -trimpath -o /echo-svc .
+RUN CGO_ENABLED=0 go build -trimpath -o /echo-svc .
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /echo-svc /echo-svc

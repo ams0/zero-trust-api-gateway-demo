@@ -14,7 +14,7 @@ kube.conf
 # Local build / runtime artifacts
 *.tar
 *.tgz
-apps/echo-svc/go.sum   # generated at build time inside the image
+# NOTE: apps/echo-svc/go.sum IS committed (reproducible, pinned, vuln-free build)
 
 # kubectl/debug dumps
 temp.json
