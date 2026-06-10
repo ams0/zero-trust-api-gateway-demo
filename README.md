@@ -410,3 +410,9 @@ as versioned config, never in the services.
 ```
 
 See **[DEMO-SCRIPT.md](./DEMO-SCRIPT.md)** for the 15-minute presentation walkthrough.
+
+---
+
+## License
+
+[MIT](./LICENSE) © 2026 Alessandro Vozza
