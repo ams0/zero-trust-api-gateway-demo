@@ -231,6 +231,16 @@ Each step shows the command, what you should see, and why it matters.
 - *Expect:* all `200` (pro = 50 req/s).
 - *Why:* identical code path, different quota. Moving a customer between tiers is a one-line route change — no service redeploy.
 
+**6. The enterprise tier serves an allowed caller.**
+```bash
+./scripts/call-api.sh enterprise carol
+```
+- *Expect:* `HTTP/2 200` with the same `orders → inventory` JSON.
+- *Why:* enterprise's quota (500 req/s) is too high to trip in a demo — its distinguishing
+  control is the **IP allowlist**, verified under [Verify the extra middleware](#ip-allowlist-enterprise-tier-only)
+  below. This step just confirms the third tier is live so the flow exercises **all three**
+  (free / pro / enterprise) plus the `/whoami` inspection route.
+
 Open in a browser (accept the self-signed cert):
 - **Traefik dashboard** → <https://traefik.local/dashboard/>
 - **Grafana** → <https://grafana.local>
