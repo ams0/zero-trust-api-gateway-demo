@@ -27,8 +27,11 @@ spec:
           type: RuntimeDefault
       containers:
         - name: manager
-          image: apikey-operator:demo
-          imagePullPolicy: IfNotPresent
+          # Built + published multi-arch (amd64/arm64) by
+          # .github/workflows/apikey-operator-image.yml. Change the org if your
+          # Docker Hub username differs from `ams0`.
+          image: docker.io/ams0/apikey-operator:demo
+          imagePullPolicy: Always
           args:
             - --leader-elect=false
             - --health-probe-bind-address=:8081

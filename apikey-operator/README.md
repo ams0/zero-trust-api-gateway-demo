@@ -52,14 +52,32 @@ spec:
 ```
 `kubectl get ak -A` shows tier, phase, secret, and expiry via printer columns.
 
-## Build & deploy (kind cluster with the base demo running)
+## Image: built in CI, published to Docker Hub (multi-arch)
+
+The operator image is built by [`.github/workflows/apikey-operator-image.yml`](../.github/workflows/apikey-operator-image.yml)
+and pushed **multi-arch (`linux/amd64` + `linux/arm64`)** to Docker Hub as
+`docker.io/ams0/apikey-operator:demo` (plus branch + `sha` tags). The kind cluster pulls
+it directly — no `kind load` needed.
+
+- Requires repo secrets **`DOCKERHUB_USERNAME`** and **`DOCKERHUB_TOKEN`** (a Docker Hub
+  access token). Push to the branch (or run the workflow manually) to build.
+- Keep the Docker Hub repo **public** so the cluster pulls anonymously (no imagePullSecret).
+  If your Docker Hub username isn't `ams0`, update the image in `config/manager/manager.yaml`.
+
+## Deploy (kind cluster with the base demo running)
 
 ```bash
 cd apikey-operator
-make manifests generate          # (re)generate CRD/RBAC/deepcopy
-make kind-load                   # build apikey-operator:demo + side-load into kind
+make manifests generate          # (re)generate CRD/RBAC/deepcopy (only if you changed types)
 make deploy                      # CRD + RBAC + manager (ns: apikey-operator-system)
 make gateway                     # dual-auth X-API-Key routes on the gateway
+```
+
+**Local-dev alternative (no CI):** build + side-load a local image and point the manager at it:
+```bash
+make kind-load                   # builds apikey-operator:demo for your arch, loads into kind
+#   then set image: apikey-operator:demo + imagePullPolicy: IfNotPresent in config/manager/manager.yaml
+make deploy
 ```
 
 ## Use it
