@@ -1,0 +1,107 @@
+# Helm values for Traefik Hub API Gateway (chart: traefik/traefik).
+# Installed into namespace "traefik". Assumes the license secret already exists:
+#   kubectl create secret generic license -n traefik --from-literal=token=$TRAEFIK_HUB_TOKEN
+#
+# Verified against doc.traefik.io/traefik-hub (install) and
+# doc.traefik.io/traefik (observability) — June 2026.
+
+# --- Traefik Hub: swap the OSS image for the Hub image and wire the license ---
+hub:
+  token: license            # name of the secret above (key must be "token")
+
+image:
+  registry: ghcr.io
+  repository: traefik/traefik-hub
+  tag: v3
+
+deployment:
+  # Single replica ON PURPOSE: Traefik's rateLimit middleware is an in-memory,
+  # per-replica token bucket. With >1 replica the per-tier limits become ~Nx and
+  # split across pods, so the rate-limit demo stops tripping reliably. Keep 1.
+  # Stability comes from a healthy control plane (fresh cluster + caffeinate),
+  # not from extra replicas -- see README troubleshooting.
+  replicas: 1
+
+# --- Expose via NodePort so kind's extraPortMappings (80/443) reach us ---
+service:
+  type: NodePort
+
+ports:
+  web:
+    nodePort: 30080
+  websecure:
+    nodePort: 30443
+    # TLS terminates here by default (ports.websecure.http.tls.enabled: true in the
+    # chart) using Traefik's built-in self-signed cert — fine for the demo.
+  traefik:
+    expose:
+      default: false       # keep the internal traefik/admin port unexposed
+
+# --- Providers ---
+providers:
+  kubernetesCRD:
+    enabled: true
+    allowCrossNamespace: true   # allow routes to reference resources across namespaces
+  kubernetesIngress:
+    enabled: false
+
+# --- Dashboard: expose Traefik's built-in dashboard via the chart's own
+#     IngressRoute on https://traefik.local/dashboard/ ---
+api:
+  dashboard: true
+ingressRoute:
+  dashboard:
+    enabled: true
+    matchRule: Host(`traefik.local`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
+    entryPoints: ["websecure"]
+    tls: {}
+
+# --- Logs: structured JSON access logs, keep the gateway-injected identity ---
+logs:
+  general:
+    level: INFO
+    format: json
+  access:
+    enabled: true
+    format: json
+    fields:
+      general:
+        defaultmode: keep
+      headers:
+        defaultmode: drop
+        names:
+          X-User-Id: keep
+          X-User-Name: keep
+          X-User-Groups: keep
+
+# --- Metrics: OTLP/gRPC to the all-in-one LGTM collector ---
+metrics:
+  otlp:
+    enabled: true
+    grpc:
+      enabled: true
+      endpoint: lgtm.observability.svc.cluster.local:4317
+      insecure: true
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+    pushInterval: 10s
+
+# --- Tracing: OTLP/gRPC to the same collector, sample everything for the demo ---
+tracing:
+  addInternals: true
+  sampleRate: 1.0
+  otlp:
+    enabled: true
+    grpc:
+      enabled: true
+      endpoint: lgtm.observability.svc.cluster.local:4317
+      insecure: true
+
+# No CPU *limit*: a CPU limit throttles Traefik under load, which can starve its
+# Hub leader-election heartbeat -> lease renewal times out -> Traefik exits and
+# crash-loops. Requests guarantee scheduling headroom; memory limit guards the
+# node. (Seen during load tests with tracing.sampleRate=1.)
+resources:
+  requests: { cpu: 500m, memory: 256Mi }
+  limits: { memory: 1Gi }

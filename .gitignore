@@ -1,0 +1,34 @@
+# Secrets — never commit a real Traefik Hub token or any rendered secret
+.env
+.env.*
+*.token
+secret*.yaml
+*-secret.yaml
+license.yaml
+
+# Kubeconfigs / cluster credentials
+kubeconfig*
+*.kubeconfig
+kube.conf
+
+# Local build / runtime artifacts
+*.tar
+*.tgz
+apps/echo-svc/go.sum   # generated at build time inside the image
+
+# kubectl/debug dumps
+temp.json
+*.dump.json
+*.log
+
+# Helm
+charts/
+*.tgz
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/

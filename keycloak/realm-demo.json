@@ -1,0 +1,82 @@
+{
+  "realm": "demo",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 1800,
+  "groups": [
+    { "name": "free" },
+    { "name": "pro" },
+    { "name": "enterprise" }
+  ],
+  "clients": [
+    {
+      "clientId": "gateway-demo",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "gateway-demo-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        },
+        {
+          "name": "audience-gateway",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "gateway-demo",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@demo.local",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Free",
+      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "groups": ["/free"]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@demo.local",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Pro",
+      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "groups": ["/pro"]
+    },
+    {
+      "username": "carol",
+      "enabled": true,
+      "email": "carol@demo.local",
+      "emailVerified": true,
+      "firstName": "Carol",
+      "lastName": "Enterprise",
+      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "groups": ["/enterprise"]
+    }
+  ]
+}

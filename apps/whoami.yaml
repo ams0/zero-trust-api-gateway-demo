@@ -1,0 +1,40 @@
+# Single whoami instance used purely as an INSPECTION endpoint at /whoami.
+# It echoes the full request verbatim — ideal for showing that the gateway
+# injects X-User-* identity headers and strips Authorization before the backend
+# is reached. It is NOT a tier; the tiers route to the orders API (apps/instrumented.yaml).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apps
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whoami
+  namespace: apps
+  labels: { app: whoami }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: whoami }
+  template:
+    metadata:
+      labels: { app: whoami }
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami:v1.10.3
+          args: ["--name=whoami"]
+          ports: [{ containerPort: 80 }]
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: whoami
+  namespace: apps
+spec:
+  selector: { app: whoami }
+  ports: [{ port: 80, targetPort: 80 }]

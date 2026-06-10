@@ -1,0 +1,22 @@
+# Enterprise-only network control: only callers from approved source ranges
+# may reach the enterprise API, layered on top of JWT auth (defense in depth).
+#
+# kind caveat: behind a NodePort the source IP Traefik observes is the kind
+# Docker network gateway, NOT your laptop's public IP. The range below matches
+# kind's default bridge (172.18.0.0/16). Confirm yours with:
+#     docker network inspect kind -f '{{(index .IPAM.Config 0).Subnet}}'
+#
+# To DEMO enforcement live: change the range to something that won't match
+# (e.g. 10.99.0.0/16), re-apply, and the enterprise route returns 403 while
+# free/pro keep working — visibly proving per-route network policy.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ip-allowlist-enterprise
+  namespace: apps
+spec:
+  ipAllowList:
+    sourceRange:
+      - 172.18.0.0/16     # kind Docker bridge
+      - 10.244.0.0/16     # kind pod CIDR
+      - 127.0.0.1/32

@@ -1,0 +1,27 @@
+# Security hardening applied to every tier. This is the "the gateway centralizes
+# more than auth" story: HSTS, CSP, anti-sniffing, clickjacking and referrer
+# controls are enforced uniformly here instead of being re-implemented (and
+# drifting) across every microservice.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+  namespace: apps
+spec:
+  headers:
+    # HSTS — force HTTPS for a year, including subdomains, preload-eligible.
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: true
+    forceSTSHeader: true
+    # Content hardening
+    contentTypeNosniff: true          # X-Content-Type-Options: nosniff
+    frameDeny: true                   # X-Frame-Options: DENY
+    browserXssFilter: true
+    contentSecurityPolicy: "default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+    referrerPolicy: "strict-origin-when-cross-origin"
+    permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+    # Don't leak the backend's identity.
+    customResponseHeaders:
+      Server: ""
+      X-Powered-By: ""

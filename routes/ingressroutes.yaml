@@ -1,0 +1,108 @@
+# The three tiers ARE the API: free/pro/enterprise are the same backend
+# (orders -> inventory) at different quotas. Each is its own IngressRoute so the
+# Traefik router/service metric carries a legible name (apps-free-<hash>, ...),
+# and because the backend is instrumented, every tier call yields a real
+# distributed trace (traefik -> orders -> inventory).
+#
+# /whoami is a separate INSPECTION endpoint (not a tier) -> the whoami echo.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: free
+  namespace: apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`api.local`) && PathPrefix(`/free`)
+      services:
+        - name: orders
+          port: 80
+      middlewares:
+        - name: chain-free
+  tls: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pro
+  namespace: apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`api.local`) && PathPrefix(`/pro`)
+      services:
+        - name: orders
+          port: 80
+      middlewares:
+        - name: chain-pro
+  tls: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: enterprise
+  namespace: apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`api.local`) && PathPrefix(`/enterprise`)
+      services:
+        - name: orders
+          port: 80
+      middlewares:
+        - name: chain-enterprise
+  tls: {}
+---
+# Inspection endpoint (not a tier): raw request echo to show injected identity
+# headers and the stripped Authorization header.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: whoami
+  namespace: apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`api.local`) && PathPrefix(`/whoami`)
+      services:
+        - name: whoami
+          port: 80
+      middlewares:
+        - name: chain-whoami
+  tls: {}
+---
+# Keycloak, published so clients can fetch tokens at https://keycloak.local
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`keycloak.local`)
+      services:
+        - name: keycloak
+          port: 8080
+  tls: {}
+---
+# Grafana (inside the all-in-one LGTM pod) at https://grafana.local
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+  namespace: observability
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`grafana.local`)
+      services:
+        - name: lgtm
+          port: 3000
+  tls: {}

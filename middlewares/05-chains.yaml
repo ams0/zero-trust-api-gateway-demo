@@ -1,0 +1,57 @@
+# Shared path rewrite: strip the tier prefix so the backend sees "/".
+# Only one of these prefixes ever matches a given request.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-tier-prefix
+  namespace: apps
+spec:
+  stripPrefix:
+    prefixes:
+      - /free
+      - /pro
+      - /enterprise
+---
+# One chain middleware per tier. The chain is the single thing a route
+# references; reordering/adding policy happens here, not in the route or the
+# service. Order matters: cheap network reject -> authenticate -> harden
+# response -> rate limit (needs the identity header) -> rewrite path.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: chain-free
+  namespace: apps
+spec:
+  chain:
+    middlewares:
+      - name: jwt-auth
+      - name: security-headers
+      - name: ratelimit-free
+      - name: strip-tier-prefix
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: chain-pro
+  namespace: apps
+spec:
+  chain:
+    middlewares:
+      - name: jwt-auth
+      - name: security-headers
+      - name: ratelimit-pro
+      - name: strip-tier-prefix
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: chain-enterprise
+  namespace: apps
+spec:
+  chain:
+    middlewares:
+      - name: ip-allowlist-enterprise   # network control first (defense in depth)
+      - name: jwt-auth
+      - name: security-headers
+      - name: ratelimit-enterprise
+      - name: strip-tier-prefix

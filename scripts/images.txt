@@ -1,0 +1,8 @@
+# Container images used by the demo. Pinned so a pre-pull guarantees a fast,
+# offline-friendly demo. Edit tags here; pre-pull + load scripts read this file.
+# (Lines starting with # and blank lines are ignored.)
+ghcr.io/traefik/traefik-hub:v3
+quay.io/keycloak/keycloak:26.0
+traefik/whoami:v1.10.3
+grafana/otel-lgtm:0.8.1
+grafana/alloy:v1.5.1

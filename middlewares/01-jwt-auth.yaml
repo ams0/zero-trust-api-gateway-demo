@@ -1,0 +1,26 @@
+# Traefik Hub JWT middleware — central authentication at the edge.
+# Every request must carry a valid Bearer token signed by Keycloak. Traefik
+# fetches Keycloak's public signing keys from the JWKS endpoint (in-cluster)
+# and verifies the signature itself; the backend services never see a token
+# and contain zero auth code.
+#
+# Validated claims are projected into request headers (forwardHeaders) so the
+# backend — and the per-user rate limiter — can act on identity without ever
+# parsing a JWT.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: jwt-auth
+  namespace: apps
+spec:
+  plugin:
+    jwt:
+      # Keycloak JWKS — resolved inside the cluster, no DNS/hosts entry needed.
+      jwksUrl: "http://keycloak.keycloak.svc.cluster.local:8080/realms/demo/protocol/openid-connect/certs"
+      # Project verified claims into headers the backend can trust.
+      forwardHeaders:
+        X-User-Id: sub
+        X-User-Name: preferred_username
+        X-User-Groups: groups
+      # Strip the Authorization header before proxying — the gateway owns auth.
+      forwardAuthorization: false

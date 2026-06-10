@@ -1,0 +1,72 @@
+# grafana/otel-lgtm — a single pod bundling an OpenTelemetry Collector,
+# Prometheus (metrics), Tempo (traces), Loki (logs) and Grafana with
+# datasources pre-wired. Traefik ships OTLP straight to :4317; Alloy ships
+# Traefik's access logs to Loki on :3100. One pane of glass, minimal moving parts.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lgtm
+  namespace: observability
+  labels: { app: lgtm }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: lgtm }
+  template:
+    metadata:
+      labels: { app: lgtm }
+    spec:
+      containers:
+        - name: lgtm
+          image: grafana/otel-lgtm:0.8.1
+          env:
+            # Open Grafana straight into the demo, no login prompt.
+            - { name: GF_AUTH_ANONYMOUS_ENABLED, value: "true" }
+            - { name: GF_AUTH_ANONYMOUS_ORG_ROLE, value: "Admin" }
+            - { name: GF_AUTH_DISABLE_LOGIN_FORM, value: "true" }
+          ports:
+            - { name: grafana, containerPort: 3000 }
+            - { name: otlp-grpc, containerPort: 4317 }
+            - { name: otlp-http, containerPort: 4318 }
+            - { name: loki, containerPort: 3100 }
+          readinessProbe:
+            httpGet: { path: /api/health, port: 3000 }
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests: { cpu: 200m, memory: 768Mi }
+            limits: { cpu: "2", memory: 2Gi }
+          volumeMounts:
+            # subPath so we add our provider/dashboard without hiding the
+            # image's built-in RED/JVM dashboards in the same directories.
+            - name: grafana-traefik
+              mountPath: /otel-lgtm/grafana/conf/provisioning/dashboards/traefik-provider.yaml
+              subPath: traefik-provider.yaml
+              readOnly: true
+            - name: grafana-traefik
+              mountPath: /otel-lgtm/grafana-dashboard-traefik.json
+              subPath: traefik.json
+              readOnly: true
+      volumes:
+        - name: grafana-traefik
+          configMap:
+            name: grafana-traefik
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lgtm
+  namespace: observability
+spec:
+  selector: { app: lgtm }
+  ports:
+    - { name: grafana, port: 3000, targetPort: 3000 }
+    - { name: otlp-grpc, port: 4317, targetPort: 4317 }
+    - { name: otlp-http, port: 4318, targetPort: 4318 }
+    - { name: loki, port: 3100, targetPort: 3100 }

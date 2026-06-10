@@ -1,0 +1,43 @@
+# Three rate-limit middlewares, one per API tier, with escalating thresholds.
+# sourceCriterion keys the limiter on X-User-Id — the header the JWT middleware
+# populates from the validated "sub" claim. Result: PER-AUTHENTICATED-USER rate
+# limiting, enforced at the gateway, with no cooperation from the services.
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit-free
+  namespace: apps
+spec:
+  rateLimit:
+    average: 5      # sustained 5 req/s
+    burst: 10       # allow short spikes to 10
+    period: 1s
+    sourceCriterion:
+      requestHeaderName: X-User-Id
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit-pro
+  namespace: apps
+spec:
+  rateLimit:
+    average: 50     # sustained 50 req/s
+    burst: 100
+    period: 1s
+    sourceCriterion:
+      requestHeaderName: X-User-Id
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit-enterprise
+  namespace: apps
+spec:
+  rateLimit:
+    average: 500    # sustained 500 req/s
+    burst: 1000
+    period: 1s
+    sourceCriterion:
+      requestHeaderName: X-User-Id

@@ -1,0 +1,113 @@
+# Grafana Alloy as a DaemonSet, tailing the Traefik pod's JSON access logs via
+# the Kubernetes API and pushing them to Loki (inside the LGTM pod). This is
+# what puts logs into the same Grafana the metrics and traces live in.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: alloy-logs
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "namespaces", "nodes", "nodes/proxy"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: alloy-logs
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: alloy-logs
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: observability
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: observability
+data:
+  config.alloy: |
+    // Discover pods, keep only Traefik, tail their logs, push to Loki.
+    discovery.kubernetes "pods" {
+      role = "pod"
+    }
+
+    discovery.relabel "traefik" {
+      targets = discovery.kubernetes.pods.targets
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        regex         = "traefik"
+        action        = "keep"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+      rule {
+        action       = "replace"
+        target_label = "job"
+        replacement  = "traefik/access"
+      }
+    }
+
+    loki.source.kubernetes "traefik" {
+      targets    = discovery.relabel.traefik.output
+      forward_to = [loki.write.lgtm.receiver]
+    }
+
+    loki.write "lgtm" {
+      endpoint {
+        url = "http://lgtm.observability.svc.cluster.local:3100/loki/api/v1/push"
+      }
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy
+  namespace: observability
+  labels: { app: alloy }
+spec:
+  selector:
+    matchLabels: { app: alloy }
+  template:
+    metadata:
+      labels: { app: alloy }
+    spec:
+      serviceAccountName: alloy
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.5.1
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --server.http.listen-addr=0.0.0.0:12345
+          ports:
+            - { name: http, containerPort: 12345 }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 256Mi }
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-config

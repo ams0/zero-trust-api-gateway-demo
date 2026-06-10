@@ -1,0 +1,24 @@
+# Chain for the /whoami inspection endpoint: authenticate + harden, then strip
+# the prefix. No rate limit -- it's a utility for showing the gateway-injected
+# identity headers (and the absence of the Authorization header) at the backend.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-whoami
+  namespace: apps
+spec:
+  stripPrefix:
+    prefixes:
+      - /whoami
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: chain-whoami
+  namespace: apps
+spec:
+  chain:
+    middlewares:
+      - name: jwt-auth
+      - name: security-headers
+      - name: strip-whoami
