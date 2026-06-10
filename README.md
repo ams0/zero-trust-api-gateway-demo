@@ -1,5 +1,7 @@
 # Zero-Trust API Gateway Demo — Traefik Hub on Kubernetes
 
+> 📐 **Looking for the multi-cluster demo?** See the architecture diagram on [Excalidraw](https://app.excalidraw.com/s/21RgRzFATME/3kR58b3qizn).
+
 A working demo that positions **Traefik Hub** as the single enforcement point in
 front of a set of lightweight microservices. All security policy — authentication,
 per-tier rate limiting, response hardening, and network allowlisting — lives at the
