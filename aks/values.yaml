@@ -1,0 +1,116 @@
+# Helm values for Traefik Hub on AKS (chart: traefik/traefik).
+# AKS variant of ../traefik/values.yaml. Differences from the kind setup:
+#   * service.type=LoadBalancer bound to a pre-reserved Standard public IP.
+#   * kubernetesIngress provider ENABLED — cert-manager's HTTP-01 solver
+#     publishes a temporary Ingress that Traefik must route on the web entrypoint.
+#   * dashboard + TLS use the real domain host and cert-manager-issued certs.
+#
+# Reserved IP: 135.225.130.22  ->  *.demo.techmasters.cloud
+# PIP name:    traefik-demo-pip  (in the AKS node resource group)
+#
+# Install:
+#   kubectl create secret generic license -n traefik --from-literal=token=$TRAEFIK_HUB_TOKEN
+#   helm upgrade --install traefik traefik/traefik -n traefik -f aks/values.yaml --wait
+
+# --- Traefik Hub: swap the OSS image for the Hub image and wire the license ---
+hub:
+  token: license            # name of the secret above (key must be "token")
+
+image:
+  registry: ghcr.io
+  repository: traefik/traefik-hub
+  tag: v3
+
+deployment:
+  # Single replica ON PURPOSE: Traefik's rateLimit middleware is an in-memory,
+  # per-replica token bucket. With >1 replica the per-tier limits become ~Nx and
+  # split across pods, so the rate-limit demo stops tripping reliably. Keep 1.
+  replicas: 1
+
+# --- Expose via a cloud LoadBalancer bound to our reserved Standard public IP ---
+service:
+  annotations:
+    # Bind the Service to the pre-reserved PIP in the AKS node resource group.
+    service.beta.kubernetes.io/azure-pip-name: traefik-demo-pip
+  spec:
+    type: LoadBalancer
+    # Preserve the real client source IP (instead of SNAT-ing to a node IP) so the
+    # enterprise tier's ipAllowList and the access logs see the actual caller.
+    # With replicas:1 the Azure LB simply routes to the single Traefik node.
+    externalTrafficPolicy: Local
+
+ports:
+  # web (80) and websecure (443) keep the chart defaults. web stays open with NO
+  # global HTTP->HTTPS redirect so cert-manager HTTP-01 challenges on
+  # /.well-known/acme-challenge/ can reach Traefik. TLS terminates on websecure
+  # using per-host certs from cert-manager (see routes.yaml).
+  traefik:
+    expose:
+      default: false       # keep the internal traefik/admin port unexposed
+
+# --- Providers ---
+providers:
+  kubernetesCRD:
+    enabled: true
+    allowCrossNamespace: true   # routes reference resources across namespaces
+  kubernetesIngress:
+    enabled: true               # required for the cert-manager HTTP-01 solver Ingress
+
+# --- Dashboard: Traefik's built-in dashboard on https://traefik.demo.techmasters.cloud ---
+api:
+  dashboard: true
+ingressRoute:
+  dashboard:
+    enabled: true
+    matchRule: Host(`traefik.demo.techmasters.cloud`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
+    entryPoints: ["websecure"]
+    tls:
+      secretName: traefik-dashboard-tls   # issued by cert-manager (Certificate in routes.yaml)
+
+# --- Logs: structured JSON access logs, keep the gateway-injected identity ---
+# (chart v41 split this into top-level `log:` + `accessLog:`)
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  enabled: true
+  format: json
+  fields:
+    defaultMode: keep
+    headers:
+      defaultMode: drop
+      names:
+        X-User-Id: keep
+        X-User-Name: keep
+        X-User-Groups: keep
+
+# --- Metrics: OTLP/gRPC to the all-in-one LGTM collector ---
+metrics:
+  otlp:
+    enabled: true
+    grpc:
+      enabled: true
+      endpoint: lgtm.observability.svc.cluster.local:4317
+      insecure: true
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+    pushInterval: 10s
+
+# --- Tracing: OTLP/gRPC to the same collector, sample everything for the demo ---
+tracing:
+  addInternals: true
+  sampleRate: 1.0
+  otlp:
+    enabled: true
+    grpc:
+      enabled: true
+      endpoint: lgtm.observability.svc.cluster.local:4317
+      insecure: true
+
+# No CPU *limit*: a CPU limit throttles Traefik under load, which can starve its
+# Hub leader-election heartbeat -> lease renewal times out -> Traefik crash-loops.
+resources:
+  requests: { cpu: 500m, memory: 256Mi }
+  limits: { memory: 1Gi }
