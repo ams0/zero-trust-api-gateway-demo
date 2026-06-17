@@ -10,7 +10,8 @@ TIER="${1:-free}"
 USERNAME="${2:-alice}"
 COUNT="${3:-40}"
 CONC="${4:-20}"
-URL="https://api.local/${TIER}"
+# API_BASE defaults to the kind host; override for AKS (e.g. source aks/env.sh).
+URL="${API_BASE:-https://api.local}/${TIER}"
 
 TOKEN="$(./get-token.sh "${USERNAME}" 2>/dev/null || true)"
 if [[ -z "${TOKEN}" || "${TOKEN}" == "null" ]]; then

@@ -1,0 +1,165 @@
+# AKS routes + TLS. Same routing model as ../routes/ingressroutes.yaml but with
+# real hostnames and cert-manager-issued certificates (one per host).
+#
+# Host suffix: demo.techmasters.cloud  ->  *.demo.techmasters.cloud A 135.225.130.22
+# Each Certificate lives in the namespace where its TLS Secret is consumed and
+# is referenced by the matching IngressRoute via spec.tls.secretName.
+
+# ── traefik dashboard cert (the dashboard IngressRoute itself is created by the
+#    Helm chart; it consumes this secret via ingressRoute.dashboard.tls.secretName)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: traefik-dashboard
+  namespace: traefik
+spec:
+  secretName: traefik-dashboard-tls
+  dnsNames: ["traefik.demo.techmasters.cloud"]
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+# ── apps / api host ──────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: api
+  namespace: apps
+spec:
+  secretName: api-tls
+  dnsNames: ["api.demo.techmasters.cloud"]
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: free
+  namespace: apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`api.demo.techmasters.cloud`) && PathPrefix(`/free`)
+      services:
+        - name: orders
+          port: 80
+      middlewares:
+        - name: chain-free
+  tls:
+    secretName: api-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pro
+  namespace: apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`api.demo.techmasters.cloud`) && PathPrefix(`/pro`)
+      services:
+        - name: orders
+          port: 80
+      middlewares:
+        - name: chain-pro
+  tls:
+    secretName: api-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: enterprise
+  namespace: apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`api.demo.techmasters.cloud`) && PathPrefix(`/enterprise`)
+      services:
+        - name: orders
+          port: 80
+      middlewares:
+        - name: chain-enterprise
+  tls:
+    secretName: api-tls
+---
+# Inspection endpoint (not a tier): raw request echo to show injected identity
+# headers and the stripped Authorization header.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: whoami
+  namespace: apps
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`api.demo.techmasters.cloud`) && PathPrefix(`/whoami`)
+      services:
+        - name: whoami
+          port: 80
+      middlewares:
+        - name: chain-whoami
+  tls:
+    secretName: api-tls
+---
+# ── keycloak host ────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  secretName: keycloak-tls
+  dnsNames: ["keycloak.demo.techmasters.cloud"]
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`keycloak.demo.techmasters.cloud`)
+      services:
+        - name: keycloak
+          port: 8080
+  tls:
+    secretName: keycloak-tls
+---
+# ── grafana host ─────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grafana
+  namespace: observability
+spec:
+  secretName: grafana-tls
+  dnsNames: ["grafana.demo.techmasters.cloud"]
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+  namespace: observability
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`grafana.demo.techmasters.cloud`)
+      services:
+        - name: lgtm
+          port: 3000
+  tls:
+    secretName: grafana-tls

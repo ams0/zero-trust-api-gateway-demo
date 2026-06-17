@@ -6,7 +6,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 TIER="${1:-free}"
 USERNAME="${2:-alice}"
-URL="https://api.local/${TIER}"
+# API_BASE defaults to the kind host; override for AKS (e.g. source aks/env.sh).
+URL="${API_BASE:-https://api.local}/${TIER}"
 
 # call-api.sh makes ONE request (to inspect headers/body). For load, use loadtest.sh.
 if [[ -n "${3:-}" ]]; then

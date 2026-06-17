@@ -1,0 +1,76 @@
+# AKS variant of ../apps/instrumented.yaml: the only change vs kind is the image.
+# kind side-loads "echo-svc:demo"; AKS nodes must PULL it from a registry, so we
+# point at the multi-arch image published to Docker Hub. imagePullPolicy: Always
+# so a rebuild of the same :demo tag is picked up on pod restart.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders
+  namespace: apps
+  labels: { app: orders }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: orders }
+  template:
+    metadata:
+      labels: { app: orders }
+    spec:
+      containers:
+        - name: orders
+          image: docker.io/ams0/echo-svc:demo
+          imagePullPolicy: Always
+          env:
+            - { name: OTEL_SERVICE_NAME, value: "orders" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "lgtm.observability.svc.cluster.local:4317" }
+            - { name: DOWNSTREAM_URL, value: "http://inventory.apps.svc.cluster.local/" }
+            - { name: LISTEN_ADDR, value: ":8080" }
+          ports: [{ containerPort: 8080 }]
+          resources:
+            requests: { cpu: 10m, memory: 24Mi }
+            limits: { cpu: 200m, memory: 96Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders
+  namespace: apps
+spec:
+  selector: { app: orders }
+  ports: [{ port: 80, targetPort: 8080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  namespace: apps
+  labels: { app: inventory }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: inventory }
+  template:
+    metadata:
+      labels: { app: inventory }
+    spec:
+      containers:
+        - name: inventory
+          image: docker.io/ams0/echo-svc:demo
+          imagePullPolicy: Always
+          env:
+            - { name: OTEL_SERVICE_NAME, value: "inventory" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "lgtm.observability.svc.cluster.local:4317" }
+            - { name: LISTEN_ADDR, value: ":8080" }
+          ports: [{ containerPort: 8080 }]
+          resources:
+            requests: { cpu: 10m, memory: 24Mi }
+            limits: { cpu: 200m, memory: 96Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory
+  namespace: apps
+spec:
+  selector: { app: inventory }
+  ports: [{ port: 80, targetPort: 8080 }]

@@ -1,0 +1,39 @@
+# Let's Encrypt ClusterIssuer using the HTTP-01 challenge.
+#
+# cert-manager solves HTTP-01 by publishing a temporary Ingress for
+# /.well-known/acme-challenge/<token>. Traefik's kubernetesIngress provider
+# (enabled in aks/values.yaml) serves that Ingress on the web entrypoint (:80),
+# and Let's Encrypt reaches it via the nip.io name that resolves to our LB IP.
+#
+# nip.io is on the Public Suffix List, so every <ip>.nip.io is its own
+# registrable domain — no shared Let's Encrypt rate-limit bucket.
+#
+# Use the staging issuer first if you are iterating (higher rate limits, untrusted
+# certs); switch routes.yaml to letsencrypt-prod for browser-trusted certs.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: alessandro@stackmasters.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress: {}   # class-less Ingress; Traefik watches all ingresses
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: alessandro@stackmasters.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress: {}

@@ -1,0 +1,20 @@
+# AKS variant of ../middlewares/04-ipallowlist.yaml.
+#
+# With service.externalTrafficPolicy=Local (set in aks/values.yaml) the Azure
+# LoadBalancer preserves the real client source IP, so Traefik's ipAllowList sees
+# the actual caller. The range below is the demo operator's public IP.
+#
+# To DEMO enforcement live: replace the range with one that won't match
+# (e.g. 10.99.0.0/16), re-apply, and the enterprise route returns 403 while
+# free/pro keep working — visibly proving per-route network policy.
+#
+# Find your current public IP:  curl -s4 ifconfig.me
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ip-allowlist-enterprise
+  namespace: apps
+spec:
+  ipAllowList:
+    sourceRange:
+      - 94.68.48.29/32     # demo operator public IP
