@@ -13,6 +13,8 @@ export KEYCLOAK_URL="https://keycloak.${SUFFIX}"
 export GRAFANA_URL="https://grafana.${SUFFIX}"
 export TRAEFIK_DASHBOARD_URL="https://traefik.${SUFFIX}/dashboard/"
 
+export KUBECONFI=G~/repos/scratch/kubeconfigs/traefik-aks.yaml
+
 echo "AKS demo endpoints:"
 echo "  API        ${API_BASE}/{free,pro,enterprise,whoami}"
 echo "  Keycloak   ${KEYCLOAK_URL}"

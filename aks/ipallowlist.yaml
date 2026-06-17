@@ -5,7 +5,7 @@
 # the actual caller. The range below is the demo operator's public IP.
 #
 # To DEMO enforcement live: replace the range with one that won't match
-# (e.g. 10.99.0.0/16), re-apply, and the enterprise route returns 403 while
+# (e.g. 94.68.48.29/32), re-apply, and the enterprise route returns 403 while
 # free/pro keep working — visibly proving per-route network policy.
 #
 # Find your current public IP:  curl -s4 ifconfig.me
